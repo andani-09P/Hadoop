@@ -1,0 +1,112 @@
+	package com.movieproject;
+
+	import java.io.IOException;
+
+	import org.apache.hadoop.io.IntWritable;
+	import org.apache.hadoop.io.LongWritable;
+	import org.apache.hadoop.io.Text;
+	import org.apache.hadoop.mapreduce.Mapper;
+
+	import org.apache.hadoop.io.FloatWritable;
+	import org.apache.hadoop.io.IntWritable;
+	import org.apache.hadoop.io.Text;
+	import org.apache.hadoop.mapreduce.Reducer;
+	import org.apache.hadoop.conf.Configuration;
+	import org.apache.hadoop.fs.Path;
+	import org.apache.hadoop.io.FloatWritable;
+	import org.apache.hadoop.io.IntWritable;
+	import org.apache.hadoop.io.Text;
+	import org.apache.hadoop.mapreduce.Job;
+	import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
+	import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+	import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+	public class Top20Rated {
+
+	public static class MovieMapper extends Mapper<LongWritable, Text, IntWritable, Text> {
+		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+			String movies = value.toString();
+			String[] movieValues = movies.split("::");
+			String movieiID = movieValues[0];
+			String movieNM = movieValues[1];
+
+			context.write(new IntWritable(Integer.parseInt(movieiID)), new Text(movieNM));
+			
+		}
+	}
+
+	public static class RatingMapper extends Mapper<LongWritable, Text, IntWritable, Text> {
+		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+			String rating = value.toString();
+			String[] ratingValues = rating.split("::");
+
+			//System.out.println("hello");
+			String movieID = ratingValues[1];
+			String movieR = ratingValues[2];
+
+			context.write(new IntWritable(Integer.parseInt(movieID)), new Text(movieR));
+			
+		}
+	}
+
+	public static class FirstReducer extends Reducer<IntWritable, Text, Text, FloatWritable> {
+		
+		public void reduce(IntWritable key, Iterable<Text> values, Context context)
+				throws IOException, InterruptedException {
+			// System.out.println(key);
+			float sum = 0;
+
+			String Mname = null;
+			// Iterator<Text> valuesIt = values.iterator();
+			String val = null;
+			int cnt = 0;
+			for (Text text : values) {
+				val = text.toString();
+				
+				if (val.matches("[0-9]*")) {
+
+					sum = sum + Integer.parseInt(val);
+					cnt++;
+				} else {
+					Mname = val;
+				}
+
+			}
+
+			float done = (sum / cnt);
+			if (cnt <= 40) {
+				if (Mname != null) {
+					context.write(new Text(Mname), new FloatWritable(done));
+				}
+			}
+		}
+	}
+
+	public static void main(String[] args) throws Exception {
+		Configuration conf = new Configuration();
+		Job job = new Job(conf, "Reduce-side join");
+		job.setJarByClass(Top20Rated.class);
+		
+		MultipleInputs.addInputPath(job, new Path("/home/andani/Documents/scripts/hadoop/mapreduce/ml-1m/movies.dat"),
+				TextInputFormat.class, MovieMapper.class);
+		MultipleInputs.addInputPath(job, new Path("/home/andani/Documents/scripts/hadoop/mapreduce/ml-1m/ratings.dat"),
+				TextInputFormat.class, RatingMapper.class);
+
+		job.setReducerClass(FirstReducer.class);
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(FloatWritable.class);
+		job.setMapOutputKeyClass(IntWritable.class);
+		job.setMapOutputValueClass(Text.class);
+
+		Path outputPath = new Path("/home/andani/Documents/scripts/hadoop/mapreduce/ml-1m/out1");
+
+		FileOutputFormat.setOutputPath(job, outputPath);
+		outputPath.getFileSystem(conf).delete(outputPath);
+
+		// System.out.println("Successfull");
+		if (!job.waitForCompletion(true))
+			return;
+		
+	}
+
+     }
